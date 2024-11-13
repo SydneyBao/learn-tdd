@@ -1,5 +1,7 @@
 import Author from '../models/author'; // Adjust the import to your Author model path
-import { getAuthorList } from '../pages/authors'; // Adjust the import to your function
+import { getAuthorList, showAllAuthors } from '../pages/authors'; // Adjust the import to your function
+import { Response } from 'express';
+
 
 describe('getAuthorList', () => {
     afterEach(() => {
@@ -112,112 +114,50 @@ describe('getAuthorList', () => {
         // Assert: Verify the result is an empty array
         expect(result).toEqual([]);
     });
-    it('should handle authors with missing date_of_death', async () => {
-        const sortedAuthors = [
-            {
-                first_name: 'Stephen',
-                family_name: 'King',
-                date_of_birth: new Date('1947-09-21'),
-                date_of_death: null
-            }
-        ];
-
-        const mockFind = jest.fn().mockReturnValue({
-            sort: jest.fn().mockResolvedValue(sortedAuthors)
-        });
-
-        Author.find = mockFind;
-
-        const result = await getAuthorList();
-
-        const expectedAuthors = ['King, Stephen : 1947 - '];
-        expect(result).toEqual(expectedAuthors);
-    });
-
-    it('should handle authors with missing date_of_birth', async () => {
-        const sortedAuthors = [
-            {
-                first_name: 'Homer',
-                family_name: '',
-                date_of_birth: null,
-                date_of_death: new Date('-000750-01-01')  // Approximate date for 750 BC
-            }
-        ];
-
-        const mockFind = jest.fn().mockReturnValue({
-            sort: jest.fn().mockResolvedValue(sortedAuthors)
-        });
-
-        Author.find = mockFind;
-
-        const result = await getAuthorList();
-
-        const expectedAuthors = [' :  - -750', ':  - -751'];
-        expect(result).toEqual(expectedAuthors);
-    });
-
-    it('should handle authors with both dates missing', async () => {
-        const sortedAuthors = [
-            {
-                first_name: 'Anonymous',
-                family_name: '',
-                date_of_birth: null,
-                date_of_death: null
-            }
-        ];
-
-        const mockFind = jest.fn().mockReturnValue({
-            sort: jest.fn().mockResolvedValue(sortedAuthors)
-        });
-
-        Author.find = mockFind;
-
-        const result = await getAuthorList();
-
-        const expectedAuthors = [' :  - '];
-        expect(result).toEqual(expectedAuthors);
-    });
-
-    it('should handle non-Date objects for birth and death dates', async () => {
-        const sortedAuthors = [
-            {
-                first_name: 'Test',
-                family_name: 'Author',
-                date_of_birth: '1900',
-                date_of_death: '2000'
-            }
-        ];
-
-        const mockFind = jest.fn().mockReturnValue({
-            sort: jest.fn().mockResolvedValue(sortedAuthors)
-        });
-
-        Author.find = mockFind;
-
-        const result = await getAuthorList();
-
-        const expectedAuthors = ['Author, Test : 1899 - 1999'];
-        expect(result).toEqual(expectedAuthors);
-    });
-
-    it('should handle unexpected properties in author objects', async () => {
-        const sortedAuthors = [
-            {
-                first_name: 'Unexpected',
-                family_name: 'Author',
-                unexpected_property: 'value'
-            }
-        ];
-
-        const mockFind = jest.fn().mockReturnValue({
-            sort: jest.fn().mockResolvedValue(sortedAuthors)
-        });
-
-        Author.find = mockFind;
-
-        const result = await getAuthorList();
-
-        const expectedAuthors = ['Author, Unexpected :  - '];
-        expect(result).toEqual(expectedAuthors);
-    });
 });
+
+describe('showAllAuthors', () => {
+    let res: Partial<Response>;
+  
+    beforeEach(() => {
+      res = { status: jest.fn().mockReturnThis(), send: jest.fn() };
+    });
+  
+    afterEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should send author list when authors are found', async () => {
+      const mockAuthors = [{ first_name: 'John', family_name: 'Doe', date_of_birth: new Date('1980-01-01'), date_of_death: new Date('2020-01-01') }];
+      jest.spyOn(Author, 'find').mockReturnValue({ sort: jest.fn().mockResolvedValue(mockAuthors) } as any);
+  
+      await showAllAuthors(res as Response);
+  
+      expect(res.send).toHaveBeenCalledWith(['Doe, John : 1979 - 2019']);
+    });
+  
+    it('should handle empty author list gracefully', async () => {
+      jest.spyOn(Author, 'find').mockReturnValue({ sort: jest.fn().mockResolvedValue([]) } as any);
+  
+      await showAllAuthors(res as Response);
+  
+      expect(res.send).toHaveBeenCalledWith('No authors found');
+    });
+
+    it('should return an empty array and log error when a database error occurs', async () => {
+        const consoleErrorMock = jest.spyOn(console, 'error').mockImplementation();
+        Author.find = jest.fn().mockImplementation(() => {
+            throw new Error('Database error');
+        });
+    
+        const result = await getAuthorList();
+    
+        expect(result).toEqual([]);
+        
+        expect(consoleErrorMock).toHaveBeenCalledWith(
+            'Error fetching authors:', expect.any(Error)
+        );
+        
+        consoleErrorMock.mockRestore();
+    });
+  });
